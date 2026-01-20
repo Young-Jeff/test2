@@ -1,0 +1,197 @@
+{
+  "userInputs": [
+    {
+      "id": "b9aac994-e7c7-4c6f-b6ca-87785e3bfcd1",
+      "type": "input",
+      "name": "Amazon Product URL ",
+      "description": "",
+      "placeholder": "",
+      "required": true
+    }
+  ],
+  "workflows": [
+    {
+      "id": "b4eaf433-3296-4d42-b700-beed714593d8",
+      "nameV2": "Job ID",
+      "type": "python_script",
+      "outputFormat": "text",
+      "script": "",
+      "nodeIds": []
+    },
+    {
+      "id": "55391e7c-f381-4285-a59a-bed09f2937e8",
+      "nameV2": "Workspace Path",
+      "type": "python_script",
+      "outputFormat": "text",
+      "script": "",
+      "nodeIds": []
+    },
+    {
+      "id": "01538256-591c-4843-8fe6-ba1aaaeb2937",
+      "nameV2": "Launch browser",
+      "type": "mcp",
+      "outputFormat": "text",
+      "prompt": "launch_browser, then set_storage with @[Connect-amazon.com](Connect-https://amazon.com)  , return only the session id from launch_browser  \n@[MCP:Chrome Automation](mcp_frevana_chrome-automation) ",
+      "model": "gpt-4.1"
+    },
+    {
+      "id": "e95fec38-7fae-4f21-962b-78ecc89ef721",
+      "nameV2": "Gather product information",
+      "type": "mcp",
+      "outputFormat": "text",
+      "prompt": "run_script\n- session_id: @[Step-3 Launch browser](01538256-591c-4843-8fe6-ba1aaaeb2937) \n- script_url: https://static.frevana.com/scripts/playwright/extract-amazon-product-v2.js\n- query: @[Question-1 Amazon Product URL ](b9aac994-e7c7-4c6f-b6ca-87785e3bfcd1) \n- createNewTab: true\n- autoCloseTab: true\nreturn only the JSON output from run_script.\n\n@[MCP:Chrome Automation](mcp_frevana_chrome-automation) \n",
+      "model": "gpt-4.1"
+    },
+    {
+      "id": "b9af23d2-f30f-49d9-a7a9-9d790a57e9e7",
+      "nameV2": "Gather target product review",
+      "type": "mcp",
+      "outputFormat": "text",
+      "prompt": "run_script:\n- session_id: @[Step-3 Launch browser](01538256-591c-4843-8fe6-ba1aaaeb2937) \n- script_url: https://static.frevana.com/scripts/playwright/extract-amazon-product-top-reviews.js\n- query: \"{\\\"url\\\":\\\" @[Question-1 Amazon Product URL ](b9aac994-e7c7-4c6f-b6ca-87785e3bfcd1)  \\\",\\\"maxPages\\\":1}\"  (Must be a valid json string)\nreturn the full json output from run_script. do not include extra words\n\n @[MCP:Chrome Automation](mcp_frevana_chrome-automation) ",
+      "model": "gpt-4.1"
+    },
+    {
+      "id": "6983aba7-3c4b-4520-81dd-04c48a4721a9",
+      "nameV2": "Find competitors with Rufus",
+      "type": "mcp",
+      "outputFormat": "text",
+      "prompt": "run_script:\n- session_id: @[Step-3 Launch browser](01538256-591c-4843-8fe6-ba1aaaeb2937) \n- script_url: https://static.frevana.com/scripts/playwright/amazon-rufus.js\n- query: \"Regarding this product: @[Question-1 Amazon Product URL ](b9aac994-e7c7-4c6f-b6ca-87785e3bfcd1), find 3-4 alternative products (not same brand) for me. Also compare this product with its alternatives, tell me the key differences and if you would recommend the alternative\"\nreturn the full json output from run_script. do not include extra words\n\n @[MCP:Chrome Automation](mcp_frevana_chrome-automation) ",
+      "model": "gpt-4.1"
+    },
+    {
+      "id": "86403367-7c94-4c37-abae-d2b00dca2586",
+      "nameV2": "Top three competitor listings",
+      "type": "python_script",
+      "outputFormat": "text",
+      "script": "import json\nimport re\n\ndef get_top_three_asins(json_input):\n    \"\"\"Parse the first three ASINs from the JSON string corresponding to UUID\"\"\"\n    try:\n        parsed_data = json.loads(json_input)\n        products = parsed_data.get('products', [])\n        asins = []\n        for item in products[:3]:\n            url = item.get('link', '')\n            match = re.search(r'/([A-Z0-9]{10})(?:[/?]|$)', url)\n            if match:\n                asins.append(match.group(1))\n        return asins\n    except:\n        return []\n\ndef strip_urls(text):\n    \"\"\"Filter out all http/https links from the string\"\"\"\n    if not isinstance(text, str):\n        return text\n    # Match and replace consecutive characters starting with http/https with empty string\n    return re.sub(r'https?://\\S+', '', text).strip()\n\ndef clean_api_data(raw_data):\n    \"\"\"Clean SerpAPI results, keep only plain text, remove links\"\"\"\n    # Extract inner data layer\n    inner_data = raw_data.get('data', {})\n    prod_res = inner_data.get('product_results', {})\n    item_spec = inner_data.get('item_specifications', {})\n    reviews_info = inner_data.get('reviews_information', {})\n    \n    # 1. Product identity information\n    product_identity = {\n        \"asin\": prod_res.get(\"asin\"),\n        \"title\": strip_urls(prod_res.get(\"title\", \"\")),\n        \"brand\": item_spec.get(\"brand\") or strip_urls(prod_res.get(\"brand\", \"\"))\n    }\n\n    # 2. Listing core text content\n    bullet_points = [strip_urls(p) for p in inner_data.get('about_item', []) if p]\n    \n    # Extract text titles from description (filter out image URLs)\n    description_titles = []\n    for desc in inner_data.get(\"product_description\", []):\n        if desc.get(\"title\"):\n            description_titles.append(strip_urls(desc.get(\"title\")))\n\n    listing_content = {\n        \"bullet_points\": bullet_points,\n        \"technical_details\": {k: strip_urls(str(v)) for k, v in item_spec.items()},\n        \"description_text\": description_titles\n    }\n\n    # 3. Customer feedback loop\n    authors_reviews = reviews_info.get(\"authors_reviews\", [])\n    formatted_reviews = []\n    for rev in authors_reviews:\n        formatted_reviews.append({\n            \"title\": strip_urls(rev.get(\"title\", \"\")),\n            \"text\": strip_urls(rev.get(\"text\", \"\")),\n            \"helpful_votes\": rev.get(\"helpful_votes\")\n        })\n\n    return {\n        \"product_identity\": product_identity,\n        \"listing_content\": listing_content,\n        \"customer_feedback_loop\": {\n            \"ai_review_summary\": strip_urls(reviews_info.get(\"summary\", {}).get(\"text\", \"\")),\n            \"recent_detailed_reviews\": formatted_reviews\n        }\n    }\n\ndef main():\n    if 'data' not in globals() or not isinstance(data, dict):\n        return \"ERROR: data not found\"\n    \n    # 1. Get original JSON string\n    json_str = data.get('6983aba7-3c4b-4520-81dd-04c48a4721a9', '').strip()\n    if not json_str:\n        return \"ERROR: input uuid is empty\"\n\n    # 2. Get first three ASINs\n    asins = get_top_three_asins(json_str)\n    if not asins:\n        return \"ERROR: No ASINs found\"\n\n    final_output = []\n\n    # 3. Iterate through ASINs to request API\n    for asin in asins:\n        try:\n            request_body = {\"asin\": asin}\n            response = frevana_api_request(\n                method=\"POST\",\n                path=\"/service/serpapi/amazon-product\",\n                body=request_body,\n                verbose=False\n            )\n            \n            # 4. Execute cleaning logic\n            if response and response.get('ok'):\n                cleaned = clean_api_data(response)\n                final_output.append(cleaned)\n        except Exception as e:\n            continue # Skip failed requests\n\n    # Return final result (convert to JSON string)\n    return json.dumps(final_output, indent=2, ensure_ascii=False)\n\nif __name__ == \"__main__\":\n    output = main()\n    print(output)",
+      "nodeIds": [
+        "6983aba7-3c4b-4520-81dd-04c48a4721a9"
+      ]
+    },
+    {
+      "id": "d2a60072-aa4e-449d-af35-de9a2dc563e8",
+      "nameV2": "Get ASIN",
+      "type": "python_script",
+      "outputFormat": "text",
+      "script": "import re\n\ndef main():\n    if 'data' not in globals() or not isinstance(data, dict):\n        return \"ERROR: data not found\"\n    \n    # Get URL\n    url = data.get('b9aac994-e7c7-4c6f-b6ca-87785e3bfcd1', '').strip()\n    \n    # Use extended regex to match dp, gp/product, gp/aw/d and d\n    # (?:...) is non-capturing group for matching multiple prefixes\n    match = re.search(r'/(?:dp|gp/product|gp/aw/d|gp|d)/([A-Z0-9]{10})', url)\n    \n    if match:\n        return match.group(1)  # Return captured ASIN, e.g. \"B0FDKR293G\"\n    else:\n        return \"ERROR: ASIN not found\"\n\nif __name__ == \"__main__\":\n    # Note: Running this script locally will return \"ERROR: data not found\",\n    # because the global variable 'data' is not injected in local environment.\n    # This should work properly in your automation platform environment.\n    output = main()\n    print(output)",
+      "nodeIds": [
+        "b9aac994-e7c7-4c6f-b6ca-87785e3bfcd1"
+      ]
+    },
+    {
+      "id": "c60520ed-abd9-431a-b9c1-e775e2b84849",
+      "nameV2": "Get Suggest Question",
+      "type": "python_script",
+      "outputFormat": "text",
+      "script": "# Python script for workflow task\n# Available global variables:\n# - data: dict containing results from previous nodes\n# - data[\"nodeId\"] contains the output from a specific node\n\nimport json\nfrom datetime import datetime, timedelta\n\ndef main():\n    \"\"\"\n    Main function that processes data from previous nodes\n    and returns Rufus suggested questions.\n    \"\"\"\n    try:        \n        # ============ 1. Get ASIN ============\n        asin = data.get('d2a60072-aa4e-449d-af35-de9a2dc563e8', '').strip()\n        # If ASIN not found, return empty\n        if not asin:\n            return \"\"\n        \n        # Build query parameters\n        now = datetime.now()\n        one_month_ago = now - timedelta(days=30)\n        # Build query parameters\n        params = {\n            'asin': asin,\n            'agent_id': 'all',\n            'timezone': 0,\n            'start_time': one_month_ago.strftime('%Y-%m-%d %H:%M:%S'),\n            'end_time': now.strftime('%Y-%m-%d %H:%M:%S')\n        }\n        \n        # Call Frevana API\n        result = frevana_api_request(\n            method=\"GET\",\n            path=\"/amazon/rufus/get-suggest-questions\",\n            params=params,\n            verbose=False\n        )\n        \n        # ============ 4. Check if request succeeded ============\n        if not result.get(\"ok\"):\n            return json.dumps({\n                \"success\": False,\n                \"error\": f\"API request failed\",\n                \"status_code\": result.get(\"status\"),\n                \"error_details\": result.get(\"error\"),\n                \"asin\": asin\n            }, indent=2, ensure_ascii=False)\n        \n        # ============ 5. Parse response data ============\n        question_data = result.get(\"data\")\n        \n        if not isinstance(question_data, dict):\n            return json.dumps({\n                \"success\": False,\n                \"error\": f\"Unexpected response format: expected dict\",\n                \"response_data\": question_data,\n                \"asin\": asin\n            }, indent=2, ensure_ascii=False)\n        \n        # Get list array and total\n        rufus_suggest_questions = question_data.get('rufus_suggest_questions', [])\n        rufus_related_questions_list = question_data.get('rufus_related_questions_list', 0)\n\n        # Define extracted related_questions\n        related_questions = []\n        \n        # rufus_suggest_questions is an array containing multiple objects\n        if isinstance(rufus_related_questions_list, list):\n            # Iterate through each related question\n            for question_info in rufus_related_questions_list:\n                if isinstance(question_info, dict):\n                    question = question_info.get('question')\n                    if question and question not in related_questions:\n                        related_questions.append(question)\n        else:\n            # Unknown format, log and exit\n            return json.dumps({\n                \"success\": False,\n                \"error\": f\"Unexpected list format: expected array\",\n                \"list_data\": rufus_related_questions_list,\n                \"asin\": asin\n            }, indent=2, ensure_ascii=False)\n            \n        # rufus_suggest_questions is an array containing multiple string values\n        if isinstance(rufus_related_questions_list, list):\n            # Iterate through each related question\n            for question in rufus_related_questions_list:\n                if isinstance(question, str):\n                    if question and question not in related_questions:\n                        related_questions.append(question)       \n        else:\n            # Unknown format, log and exit\n            return json.dumps({\n                \"success\": False,\n                \"error\": f\"Unexpected list format: expected array\",\n                \"list_data\": rufus_related_questions_list,\n                \"asin\": asin\n            }, indent=2, ensure_ascii=False)\n        \n        # ============ 6. Build final result ============\n        result = {\n            \"success\": True,\n            \"related_questions\": related_questions,\n            \"asin\": asin\n        }\n        \n        return '\\n'.join(related_questions)\n        \n    except Exception as e:\n        return ''\n\n\n# Execute the main function and print the result\nif __name__ == \"__main__\":\n    output = main()\n    print(output)",
+      "nodeIds": [
+        "d2a60072-aa4e-449d-af35-de9a2dc563e8"
+      ]
+    },
+    {
+      "id": "f2ac2076-c394-441e-af9f-f747b2b0aa64",
+      "nameV2": "Product Related QA",
+      "type": "mcp",
+      "outputFormat": "text",
+      "prompt": "run_script:\n- session_id: @[Step-3 Launch browser](01538256-591c-4843-8fe6-ba1aaaeb2937) \n- script_url: https://static.frevana.com/scripts/playwright/extract-amazon-rufus-qa.js\n- query: @[Question-1 Amazon Product URL ](b9aac994-e7c7-4c6f-b6ca-87785e3bfcd1)  \nreturn the full json output from run_script. do not include extra words\n\n  @[MCP:Chrome Automation](mcp_frevana_chrome-automation) ",
+      "model": "gpt-4.1"
+    },
+    {
+      "id": "ef5f29db-8c14-48cb-add8-01639ae031d3",
+      "nameV2": "Close browser",
+      "type": "mcp",
+      "outputFormat": "text",
+      "prompt": "(ignore this: @[Step-10 Product Related QA](f2ac2076-c394-441e-af9f-f747b2b0aa64) )\n\nclose_browser\n- session_id: @[Step-3 Launch browser](01538256-591c-4843-8fe6-ba1aaaeb2937) \n\n @[MCP:Chrome Automation](mcp_frevana_chrome-automation) ",
+      "model": "gpt-4.1"
+    },
+    {
+      "id": "89e4c24f-efe0-451e-a19f-675a917b06a9",
+      "nameV2": "1 - Generate Content Audit",
+      "type": "ai_prompt",
+      "outputFormat": "text",
+      "prompt": "Role: Amazon Product Q&A Expert\n\nYour Mandate: You are the Q&A content engine for an Amazon listing. You must analyze the provided inputs to identify Semantic Gaps and Compliance Redlines. \n\n---\n\nStrategic Directives:\n\n1. AEO Evidence Matrix: Compare the Rufus Suggested Questions from the Target Product QA against the Target Listing Data,  Identify where Rufus currently lacks information.\n2. Group the questions from @[Step-9 Get Suggest Question](c60520ed-abd9-431a-b9c1-e775e2b84849) based on user intent, de-duplicate, and use the exiting product listing data to answer those questions\n3. Use the data from 1 and 2 to generate a new list of question and answers, the goal is to improve listing's content and increase purchase conversion.\n4. Compliance Defense: Scan for high-risk landmines. \n- Medical Claims: Identify language suggesting curing or alleviating health conditions.\n- IP Risks: Detect trademarked terms like Velcro used as generic descriptors.\n- Diverting Traffic: Scan for prohibited phrases like Customer Service or Contact Us.\n- Style Guide: Ensure the Title starts with the Brand Name.\n\n---\n\nInput Data for Analysis:\n\nToday's Date: @[Builtin-Today](builtin:Today) \n\nProduct Related Questions:\n@[Step-9 Get Suggest Question](c60520ed-abd9-431a-b9c1-e775e2b84849) \n\nTarget Listing Data:\n@[Step-4 Gather product information](e95fec38-7fae-4f21-962b-78ecc89ef721) \n\nTarget Product QA (Rufus Intents): \n@[Step-10 Product Related QA](f2ac2076-c394-441e-af9f-f747b2b0aa64) \n\nTarget Product Review Summary: \n@[Step-5 Gather target product review](b9af23d2-f30f-49d9-a7a9-9d790a57e9e7) \n\nCompetitor Product Benchmarks: \n@[Step-6 Find competitors with Rufus](6983aba7-3c4b-4520-81dd-04c48a4721a9) \n\n---\n\n---\n\nOutput Format\n\n---\n\nPHASE 1: STRATEGIC AUDIT SUMMARY\n\n- Overall Quality Critique: Evaluate the current listing authority and answerability.\n- Top 3 Semantic Gaps: Identify the high-volume Rufus questions that lack evidence in the current text.\n- Data and Logic Inconsistencies: Report any mathematical errors or conflicting information.\n- Compliance Redline Report: List detected medical, IP, or diverting terms that must be removed.\n\n---\n\nPHASE 2: THEORETICAL PRINCIPLES (THE WHY)\n\n- AEO (Answer Engine Optimization): Explain why providing Hard Facts instead of vague adjectives allows Rufus to cite the listing as a source.\n- GEO (Generative Engine Optimization): Explain how using specific Noun Phrases and statistics increases the Confidence Score in AI-generated recommendations.\n- 10% Protocol Logic: Explain why limiting changes to 10% preserves existing SEO traffic and ranking authority.\n\n---\nPHASE 3: Q&A \n- The new list of Q&A that can be used to improve listing's content and increase current listing's purchase conversion.\n- Make sure the answer can be extracted from the product listing, if not, try your best to answer it but label it as \"need reviews\"\n\n @Step-11 Close browser \n",
+      "model": "gpt-4.1"
+    },
+    {
+      "id": "84ed7ae0-9c4e-4d6b-851d-deb2c5641ad6",
+      "nameV2": "Generate Report",
+      "type": "ai_prompt",
+      "outputFormat": "text",
+      "prompt": "Role: Amazon Q&A Generation Expert\n\nYour Mandate: Based on the Audit Summary from PHASE 3, generate a comprehensive, well-organized Q&A report.\n\nCRITICAL CONSTRAINT - PRESERVE EXACT Q&A TEXT:\nWhen using Q&A from PHASE 3 of the Audit Summary:\n- Use the EXACT original wording for each question (do NOT rephrase)\n- Use the EXACT original answer text (do NOT summarize or rewrite)\n- Keep ALL placeholder text exactly as written (e.g., \"[Content not available - need reviews]\")\n- If a question/answer pair exists in PHASE 3, copy it verbatim\n\nYou MAY:\n- Group related questions into logical categories\n- Add section headers and organization\n- Format beautifully with clear structure\n- Add contextual notes at category level (but NOT within Q&A text itself)\n\n---\n\nExecution Rules:\n\n1. Report date must use the date provided below.\n2. Cover all the questions from Rufus related Questions and listing questions\n3. Organize into clear categories for easy navigation\n4. Maintain professional formatting throughout\n\n---\n\nInput Data:\nToday's Date: @[Builtin-Today](builtin:Today) \n\nOriginal Listing:  \n@[Step-4 Gather product information](e95fec38-7fae-4f21-962b-78ecc89ef721) \n\nAudit Summary with PHASE 3 Q&A:\n@[Step-12 1 - Generate Content Audit](89e4c24f-efe0-451e-a19f-675a917b06a9) \n\nRufus related Questions:\n@[Step-9 Get Suggest Question](c60520ed-abd9-431a-b9c1-e775e2b84849) \n\n---\n\nOutput Format: Well-organized Q&A report with clear categories and beautiful formatting.\n\nREMEMBER: For any Q&A from PHASE 3 - use EXACT original text!\n\n---\n",
+      "model": "gpt-4.1"
+    },
+    {
+      "id": "a8f9c3e1-2b4d-4a5e-9f1c-3d7e8a9b0c1d",
+      "nameV2": "Extract Q&A List",
+      "type": "ai_prompt",
+      "outputFormat": "text",
+      "prompt": "Extract all Q&A pairs from the PHASE 3 section of @[Step-12 1 - Generate Content Audit](89e4c24f-efe0-451e-a19f-675a917b06a9)\n\nCRITICAL REQUIREMENTS:\n1. Preserve the EXACT original wording of BOTH questions AND answers\n2. Do NOT rephrase, paraphrase, summarize, or modify any text\n3. Do NOT change placeholder text like \"[Content not available - need reviews]\"\n4. Extract everything EXACTLY as it appears in PHASE 3, character by character\n5. If an answer includes brackets, labels, or special formatting - keep it exactly\n\nOutput format: JSON array with question and answer pairs.\n\nExample output:\n[\n  {\"question\": \"What is the battery life?\", \"answer\": \"The battery lasts up to 10 hours on a single charge.\"},\n  {\"question\": \"Is it compatible with Alexa?\", \"answer\": \"Yes, it works with Alexa, Google Home, and Siri.\"},\n  {\"question\": \"What materials is this product made from?\", \"answer\": \"[Content not available - need product data. Labeled as: need reviews]\"}\n]\n\nReturn ONLY the JSON array, no extra text. Do NOT modify ANY content.",
+      "model": "gpt-4.1-mini"
+    },
+    {
+      "id": "b7e6d5c4-3a2f-4b1e-8c9d-2e3f4a5b6c7d",
+      "nameV2": "Export Q&A to CSV",
+      "type": "python_script",
+      "outputFormat": "text",
+      "script": "# Python script for workflow task - Export Q&A to CSV\n# Available global variables:\n# - data: dict containing results from previous nodes\n\nimport json\nimport csv\nimport os\nfrom datetime import datetime\n\ndef parse_qa_pairs(qa_json_str, current_time):\n    \"\"\"\n    Parse Q&A pairs from JSON string.\n    \n    Args:\n        qa_json_str: JSON string containing Q&A pairs\n        current_time: Current datetime string to assign to new records\n        \n    Returns:\n        List of tuples (Time, Question, Answer)\n    \"\"\"\n    if not qa_json_str:\n        return []\n    \n    try:\n        # Try to parse as JSON array\n        qa_pairs = json.loads(qa_json_str)\n        if not isinstance(qa_pairs, list):\n            return []\n        \n        result = []\n        for item in qa_pairs:\n            if isinstance(item, dict) and 'question' in item and 'answer' in item:\n                question = item['question'].strip()\n                answer = item['answer'].strip()\n                if question and answer:\n                    result.append((current_time, question, answer))\n        \n        return result\n    except json.JSONDecodeError:\n        # If JSON parsing fails, return empty list\n        return []\n    except Exception as e:\n        return []\n\ndef read_existing_csv(csv_path):\n    \"\"\"\n    Read existing CSV file and return list of (Time, Question, Answer) tuples.\n    \n    Args:\n        csv_path: Path to CSV file\n        \n    Returns:\n        List of (Time, Question, Answer) tuples\n    \"\"\"\n    existing_records = []\n    \n    if os.path.exists(csv_path):\n        try:\n            with open(csv_path, 'r', encoding='utf-8', newline='') as f:\n                reader = csv.DictReader(f)\n                for row in reader:\n                    if 'Question' in row and row['Question']:\n                        dt = row.get('Time', '').strip()\n                        question = row['Question'].strip()\n                        answer = row.get('Answer', '').strip()\n                        existing_records.append((dt, question, answer))\n        except Exception as e:\n            # If there's an error reading the file, just return empty list\n            pass\n    \n    return existing_records\n\ndef export_to_csv(qa_data, csv_path):\n    \"\"\"\n    Export Q&A to CSV file with deduplication.\n    Rewrites the entire file with existing + new records.\n    \n    Args:\n        qa_data: List of tuples (Time, Question, Answer)\n        csv_path: Path to CSV file\n        \n    Returns:\n        dict with export statistics\n    \"\"\"\n    # Read existing records\n    existing_records = read_existing_csv(csv_path)\n    \n    # Create a set of questions for quick duplicate checking\n    existing_questions = {question for dt, question, answer in existing_records}\n    \n    # Merge existing and new records, filtering duplicates\n    all_records = list(existing_records)\n    new_count = 0\n    duplicate_count = 0\n    \n    for dt, question, answer in qa_data:\n        if question not in existing_questions:\n            # New record, add it\n            all_records.append((dt, question, answer))\n            existing_questions.add(question)\n            new_count += 1\n        else:\n            # Duplicate, skip it\n            duplicate_count += 1\n    \n    # Sort records by time, then by question\n    sorted_records = sorted(all_records, key=lambda x: (x[0], x[1]))\n    \n    # Rewrite entire CSV file\n    try:\n        # Ensure directory exists\n        os.makedirs(os.path.dirname(csv_path), exist_ok=True)\n        \n        with open(csv_path, 'w', encoding='utf-8', newline='') as f:\n            writer = csv.writer(f)\n            \n            # Write header with Answer column\n            writer.writerow(['Time', 'Question', 'Answer'])\n            \n            # Write all records\n            for dt, question, answer in sorted_records:\n                writer.writerow([dt, question, answer])\n        \n        return {\n            'success': True,\n            'message': f'Successfully exported {new_count} new Q&A ({duplicate_count} duplicates skipped). Total records: {len(sorted_records)}',\n            'data': csv_path\n        }\n        \n    except Exception as e:\n        return {\n            'success': False,\n            'message': f'Failed to export Q&A: {str(e)}',\n            'data': None\n        }\n\ndef main():\n    \"\"\"\n    Main function to process Q&A and export to CSV.\n    \"\"\"\n    try:\n        # Check data exists\n        if 'data' not in globals() or not isinstance(data, dict):\n            return json.dumps({\n                \"success\": False,\n                \"message\": \"Data not found\",\n                \"data\": None\n            }, indent=2)\n        \n        # Get CSV directory and filename from data\n        csv_directory = get_agent_dir()\n            \n        # Construct CSV path\n        csv_filename = 'Amazon Product Q&A Research.csv'\n        csv_path = os.path.join(csv_directory, csv_filename)\n        \n        # Get current time with minute precision\n        current_time = datetime.now().strftime('%Y-%m-%d %H:%M')\n        \n        # Get input data - Q&A JSON from Step 12\n        qa_json_str = data.get('a8f9c3e1-2b4d-4a5e-9f1c-3d7e8a9b0c1d', '').strip()\n        \n        # Parse Q&A pairs\n        all_qa = parse_qa_pairs(qa_json_str, current_time)\n        \n        # Export to CSV\n        if all_qa:\n            result = export_to_csv(all_qa, csv_path)\n            return json.dumps({\n                \"success\": result['success'],\n                \"message\": result['message'],\n                \"data\": result['data']\n            }, indent=2)\n        else:\n            return json.dumps({\n                \"success\": False,\n                \"message\": \"No Q&A found in input data\",\n                \"data\": csv_path\n            }, indent=2)\n        \n    except Exception as e:\n        return json.dumps({\n            \"success\": False,\n            \"message\": f\"Error: {str(e)}\",\n            \"data\": None\n        }, indent=2)\n\nif __name__ == \"__main__\":\n    output = main()\n    print(output)\n",
+      "nodeIds": [
+        "a8f9c3e1-2b4d-4a5e-9f1c-3d7e8a9b0c1d"
+      ]
+    },
+    {
+      "id": "c9d8e7f6-5a4b-3c2d-1e0f-9a8b7c6d5e4f",
+      "nameV2": "Get CSV file path",
+      "type": "script",
+      "outputFormat": "text",
+      "script": "\nmodule.exports = async function() {\n  \n  let result = JSON.parse(data[\"b7e6d5c4-3a2f-4b1e-8c9d-2e3f4a5b6c7d\"]);\n  if(result.success && !!result.data){\n    return result.data;\n  }\n  throw Error(result?.message || \"Export Q&A error\");\n  \n}\n",
+      "nodeIds": [
+        "b7e6d5c4-3a2f-4b1e-8c9d-2e3f4a5b6c7d"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "type": "plain_text",
+      "fields": [],
+      "items": {
+        "content": "84ed7ae0-9c4e-4d6b-851d-deb2c5641ad6"
+      }
+    },
+    {
+      "type": "local_file",
+      "fields": [],
+      "items": {
+        "content": "c9d8e7f6-5a4b-3c2d-1e0f-9a8b7c6d5e4f"
+      }
+    },
+    {
+      "type": "html",
+      "fields": [
+        "content"
+      ],
+      "items": {
+        "content": "84ed7ae0-9c4e-4d6b-851d-deb2c5641ad6"
+      },
+      "metadata": {
+        "templateId": "qa-page-style-4"
+      }
+    }
+  ],
+  "inputValues": {
+    "b9aac994-e7c7-4c6f-b6ca-87785e3bfcd1": [
+      "https://www.amazon.com/dp/B0BVHN3D72"
+    ]
+  },
+  "version": "1.0",
+  "metadata": {
+    "author": "Leo Liu",
+    "createdAt": "2026-01-19T02:37:28.852Z"
+  },
+  "frequency": "-1",
+  "mcpConfigs": {
+
+  },
+  "workflowConnects": [
+    "https://amazon.com"
+  ]
+}
