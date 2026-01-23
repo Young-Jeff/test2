@@ -1,0 +1,97 @@
+{
+  "userInputs": [
+    {
+      "id": "content-url-input",
+      "type": "input",
+      "name": "Original Content URL",
+      "description": "Enter the URL of the original content to translate",
+      "placeholder": "https://dev-www.frevana.com/content/en/your-report-id",
+      "required": true
+    },
+    {
+      "id": "target-languages-input",
+      "type": "keywords",
+      "name": "Target Languages",
+      "description": "Comma-separated language codes (e.g., zh, ja, es)",
+      "placeholder": "zh, ja, es",
+      "required": true
+    }
+  ],
+  "workflows": [
+    {
+      "id": "setup",
+      "nameV2": "Setup",
+      "type": "script",
+      "outputFormat": "text",
+      "script": "module.exports = async function() {\n  const contentUrl = data['content-url-input'] || '';\n  const languagesStr = data['target-languages-input'] || '';\n  \n  if (!contentUrl || !languagesStr) throw new Error('URL and languages required');\n  \n  // Extract content ID from URL\n  const urlParts = contentUrl.split('/');\n  const lastPart = urlParts[urlParts.length - 1];\n  const contentId = lastPart.split('-').pop();\n  if (!contentId || contentId.length < 10) throw new Error('Invalid content ID');\n  \n  // Parse target languages\n  const languages = languagesStr.split(',').map(l => l.trim().toLowerCase()).filter(l => l);\n  if (languages.length === 0) throw new Error('No valid languages');\n  \n  console.log(`Content ID: ${contentId}`);\n  console.log(`Target languages: ${languages.join(', ')}`);\n  \n  // Download original HTML from S3\n  console.log('Checking existing translations...');\n  const versionsResp = await api.frevanaApi.request('GET', `/s3/content/${contentId}/language-versions`);\n  \n  let existingLanguages = [];\n  if (versionsResp.ok && versionsResp.data?.versions) {\n    existingLanguages = versionsResp.data.versions.map(v => v.language_code);\n    console.log(`Existing S3 translations: ${existingLanguages.join(', ') || 'none'}`);\n  }\n  \n  // Check local database for existing translations\n  const localTranslations = await api.db.listTranslations({ original_content_id: contentId });\n  const localLanguages = localTranslations.map(t => t.language_code);\n  console.log(`Existing local translations: ${localLanguages.join(', ') || 'none'}`);\n  \n  const languagesToTranslate = languages.filter(lang => !localLanguages.includes(lang) && !existingLanguages.includes(lang));\n  console.log(`Languages to translate: ${languagesToTranslate.join(', ') || 'none'}`);\n  \n  let originalHtml = '';\n  if (languagesToTranslate.length > 0) {\n    const firstLang = languagesToTranslate[0];\n    const prepareResp = await api.frevanaApi.request('POST', `/s3/content/${contentId}/prepare-translate`, { target_language: firstLang });\n    if (!prepareResp.ok) throw new Error('Failed to prepare translation');\n    \n    const downloadUrl = prepareResp.data.download_url;\n    const response = await api.fetch(downloadUrl);\n    originalHtml = await response.text();\n    console.log(`Downloaded ${originalHtml.length} characters`);\n  }\n  \n  return JSON.stringify({ contentId, languages, originalHtml });\n};",
+      "nodeIds": ["content-url-input", "target-languages-input"]
+    },
+    {
+      "id": "extract-languages",
+      "nameV2": "Extract Languages",
+      "type": "script",
+      "outputFormat": "text",
+      "script": "module.exports = async function() {\n  const setupData = JSON.parse(data['setup'] || '{}');\n  const languages = setupData.languages || [];\n  if (languages.length === 0) throw new Error('No languages to translate');\n  console.log(`Extracted ${languages.length} languages: ${languages.join(', ')}`);\n  return languages.join('\\n');\n};",
+      "nodeIds": ["setup"]
+    },
+    {
+      "id": "translate-loop",
+      "nameV2": "Translate All Languages",
+      "type": "loop",
+      "outputFormat": "text",
+      "subNodes": [
+        {
+          "id": "check-prepare",
+          "nameV2": "Check Translation Status",
+          "type": "script",
+          "outputFormat": "text",
+          "script": "module.exports = async function() {\n  const setupData = JSON.parse(data['setup'] || '{}');\n  const lang = data['translate-loop-loop'] || '';\n  const contentId = setupData.contentId;\n  const originalHtml = setupData.originalHtml;\n  \n  if (!contentId) throw new Error('Missing content ID');\n  console.log(`[${lang}] Checking translation status...`);\n  \n  // Check local database first\n  const existingTranslation = await api.db.getByContentAndLanguage(contentId, lang);\n  if (existingTranslation) {\n    console.log(`[${lang}] Found in local database (ID: ${existingTranslation.id})`);\n    return JSON.stringify({ skip: true, lang, status: 'local_existing', id: existingTranslation.id });\n  }\n  \n  // Check S3\n  const versionsResp = await api.frevanaApi.request('GET', `/s3/content/${contentId}/language-versions`);\n  if (versionsResp.ok && versionsResp.data?.versions) {\n    const existing = versionsResp.data.versions.find(v => v.language_code === lang);\n    if (existing) {\n      console.log(`[${lang}] Found in S3`);\n      return JSON.stringify({ skip: true, lang, status: 's3_existing', id: existing.content_id, url: existing.url });\n    }\n  }\n  \n  // Need to translate\n  console.log(`[${lang}] Need translation`);\n  return JSON.stringify({ skip: false, lang, html: originalHtml });\n};",
+          "nodeIds": ["setup", "translate-loop-loop"]
+        },
+        {
+          "id": "translate-html",
+          "nameV2": "Translate HTML",
+          "type": "local_translate",
+          "outputFormat": "text",
+          "nodeIds": ["check-prepare"]
+        },
+        {
+          "id": "save-translation",
+          "nameV2": "Save to Database",
+          "type": "script",
+          "outputFormat": "text",
+          "script": "module.exports = async function() {\n  const prep = JSON.parse(data['check-prepare'] || '{}');\n  const translatedHtml = data['translate-html'] || '';\n  const lang = prep.lang;\n  const setupData = JSON.parse(data['setup'] || '{}');\n  const contentId = setupData.contentId;\n  \n  if (prep.skip) {\n    console.log(`[${lang}] Skipped - ${prep.status}`);\n    return JSON.stringify({ lang, status: prep.status, skipped: true, id: prep.id });\n  }\n  \n  // Extract title from translated HTML\n  const titleMatch = translatedHtml.match(/<title[^>]*>([^<]+)<\\/title>/i);\n  const title = titleMatch?.[1]?.trim() || `Translated to ${lang}`;\n  \n  // Save to local database\n  const translation = await api.db.createTranslation({\n    original_content_id: contentId,\n    language_code: lang,\n    translated_html: translatedHtml,\n    title,\n    status: 'draft'\n  });\n  \n  console.log(`[${lang}] Saved to database (ID: ${translation.id})`);\n  return JSON.stringify({ lang, status: 'translated', id: translation.id, title });\n};",
+          "nodeIds": ["check-prepare", "translate-html"]
+        }
+      ],
+      "prompt": "@[Step-2 Extract Languages](extract-languages)",
+      "nodeIds": ["extract-languages"]
+    },
+    {
+      "id": "report",
+      "nameV2": "Translation Report",
+      "type": "script",
+      "outputFormat": "text",
+      "script": "module.exports = async function() {\n  const results = data['translate-loop'] || '';\n  if (!results) return 'No translations completed';\n  \n  const items = results.split('\\n').filter(l => l.trim()).map(l => JSON.parse(l));\n  const setupData = JSON.parse(data['setup'] || '{}');\n  const contentId = setupData.contentId;\n  \n  const translatedCount = items.filter(i => i.status === 'translated').length;\n  const skippedCount = items.filter(i => i.skipped).length;\n  \n  let md = '# Translation Completed\\n\\n';\n  md += `**Content ID:** ${contentId}\\n\\n`;\n  md += `**Total:** ${items.length} | **Translated:** ${translatedCount} | **Skipped:** ${skippedCount}\\n\\n';\n  md += '## Translation Summary\\n\\n';\n  md += '| Language | Status | Title | ID |\\n';\n  md += '|----------|--------|-------|-----|\\n';\n  items.forEach(i => {\n    md += `| ${i.lang.toUpperCase()} | ${i.status} | ${i.title || 'N/A'} | ${i.id || 'N/A'} |\\n';\n  });\n  md += '\\n\\n**All translations are saved locally.**\\n\\n';\n  md += 'You can:\\n';\n  md += '- Preview each translation\\n';\n  md += '- Edit before publishing\\n';\n  md += '- Publish to S3 when ready\\n';\n  \n  return md;\n};",
+      "nodeIds": ["translate-loop", "setup"]
+    }
+  ],
+  "results": [
+    {
+      "type": "plain_text",
+      "fields": [],
+      "items": {
+        "content": "report"
+      }
+    }
+  ],
+  "version": "1.0",
+  "metadata": {
+    "author": "system",
+    "createdAt": "2026-01-22T00:00:00.000Z",
+    "description": "Translate HTML content to multiple languages using local OpenAI and save to database"
+  },
+  "frequency": "-1",
+  "mcpConfigs": {},
+  "workflowConnects": []
+}
