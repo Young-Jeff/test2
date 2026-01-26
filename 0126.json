@@ -169,7 +169,7 @@
   ],
   "results": [{ "type": "plain_text", "fields": [], "items": { "content": "report" } }],
   "version": "1.0",
-  "metadata": { "author": "Jeff-1", "createdAt": "2026-01-26T12:40:24.660Z" },
+  "metadata": { "author": "Jeff", "createdAt": "2026-01-26T12:40:24.660Z" },
   "frequency": "-1",
   "mcpConfigs": {},
   "workflowConnects": [],
