@@ -51,6 +51,14 @@
       "outputFormat": "text",
       "script": "\nmodule.exports = async function() {\n  \n  let result = JSON.parse(data[\"3c4d5e6f-7g8h-9i0j-1k2l-3m4n5o6p7q8r\"]);\n  if(result.success && !!result.data){\n    return result.data;\n  }\n  throw Error(result?.message || \"Export Q&A error\");\n  \n}\n",
       "nodeIds": ["3c4d5e6f-7g8h-9i0j-1k2l-3m4n5o6p7q8r"]
+    },
+    {
+      "id": "5e6f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t",
+      "nameV2": "Read CSV Content",
+      "type": "script",
+      "outputFormat": "text",
+      "script": "\nconst fs = require('fs');\n\nmodule.exports = async function() {\n  try {\n    // Get CSV file path from previous step\n    const csvPath = data[\"4d5e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s\"];\n    \n    if (!csvPath) {\n      throw new Error(\"CSV file path not found\");\n    }\n    \n    // Read CSV file content\n    const csvContent = fs.readFileSync(csvPath, 'utf-8');\n    \n    if (!csvContent) {\n      throw new Error(\"CSV file is empty\");\n    }\n    \n    return csvContent;\n    \n  } catch (error) {\n    throw new Error(`Failed to read CSV: ${error.message}`);\n  }\n}\n",
+      "nodeIds": ["4d5e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s"]
     }
   ],
   "results": [
@@ -67,7 +75,7 @@
     {
       "type": "html",
       "fields": ["content"],
-      "items": { "content": "4d5e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s" },
+      "items": { "content": "5e6f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t" },
       "metadata": { "templateId": "qa-page-style-4" }
     }
   ],
