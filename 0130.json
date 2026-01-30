@@ -46,10 +46,10 @@
     },
     {
       "id": "4d5e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s",
-      "nameV2": "Get CSV file info with path",
+      "nameV2": "Get CSV file path",
       "type": "script",
       "outputFormat": "text",
-      "script": "\nconst fs = require('fs');\nconst path = require('path');\n\nmodule.exports = async function() {\n  \n  let result = JSON.parse(data[\"3c4d5e6f-7g8h-9i0j-1k2l-3m4n5o6p7q8r\"]);\n  if(result.success && !!result.data){\n    const csvPath = result.data;\n    \n    // Get file stats to break UI caching\n    const stats = fs.statSync(csvPath);\n    const fileName = path.basename(csvPath);\n    const modifiedTime = stats.mtime.toISOString().replace('T', ' ').substring(0, 19);\n    const fileSize = stats.size;\n    \n    // Count total Q&A pairs (lines - 1 for header)\n    const content = fs.readFileSync(csvPath, 'utf-8');\n    const lines = content.trim().split('\\n');\n    const qaCount = Math.max(0, lines.length - 1);\n    \n    // Return formatted info that includes the path\n    // Each run will have different timestamp, preventing UI cache\n    return `CSV File Information\\n` +\n           `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n` +\n           `File: ${fileName}\\n` +\n           `Last Updated: ${modifiedTime}\\n` +\n           `File Size: ${fileSize} bytes\\n` +\n           `Total Q&A Pairs: ${qaCount}\\n` +\n           `\\n` +\n           `Full Path:\\n${csvPath}\\n` +\n           `\\n` +\n           `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n` +\n           `Click \"Show in Folder\" to open the file location.`;\n  }\n  throw Error(result?.message || \"Export Q&A error\");\n  \n}\n",
+      "script": "\nmodule.exports = async function() {\n  \n  let result = JSON.parse(data[\"3c4d5e6f-7g8h-9i0j-1k2l-3m4n5o6p7q8r\"]);\n  if(result.success && !!result.data){\n    return result.data;\n  }\n  throw Error(result?.message || \"Export Q&A error\");\n  \n}\n",
       "nodeIds": ["3c4d5e6f-7g8h-9i0j-1k2l-3m4n5o6p7q8r"]
     },
     {
@@ -62,10 +62,10 @@
     },
     {
       "id": "6f7g8h9i-0j1k-2l3m-4n5o-6p7q8r9s0t1u",
-      "nameV2": "Generate HTML Report from CSV",
+      "nameV2": "Parse CSV to JSON",
       "type": "ai_prompt",
       "outputFormat": "text",
-      "prompt": "Read the CSV data from @[Step-6 Read CSV Content](5e6f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t) and prepare it for HTML rendering.\n\nThe CSV contains all Q&A pairs (including historical data) in the format:\nTime,Question,Answer\n2026-01-30 15:51,Question text,Answer text\n...\n\n## YOUR TASK:\n1. Parse the CSV data (skip the header row)\n2. Extract ALL Question and Answer pairs\n3. Return a formatted summary that includes:\n   - Total number of Q&A pairs\n   - All questions and answers in a clear format\n\n## OUTPUT FORMAT:\nReturn the data in this format:\n\n---\nTotal Q&A Pairs: [NUMBER]\n\nQ&A List:\n\n1. Q: [Question 1]\n   A: [Answer 1]\n\n2. Q: [Question 2]\n   A: [Answer 2]\n\n...\n---\n\nIMPORTANT:\n- Include ALL Q&A pairs from the CSV (not just recent ones)\n- Preserve the exact question and answer text\n- Number each Q&A pair sequentially\n- This data will be used for HTML generation",
+      "prompt": "Read the CSV data from @[Step-6 Read CSV Content](5e6f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t) and convert it into a strict JSON array for HTML rendering.\n\nThe CSV format is:\nTime,Question,Answer\n2026-01-30 15:51,Question text,Answer text\n...\n\n## YOUR TASK:\n1. Parse the CSV data and skip the header row\n2. Extract ALL Question and Answer pairs (including historical data)\n3. Return ONLY a JSON array of objects with \"question\" and \"answer\"\n\n## OUTPUT FORMAT (STRICT):\n[\n  {\"question\": \"Question 1\", \"answer\": \"Answer 1\"},\n  {\"question\": \"Question 2\", \"answer\": \"Answer 2\"}\n]\n\n## CRITICAL RULES:\n- Return ONLY valid JSON (no markdown, no notes, no extra text)\n- Include EVERY row from the CSV (no sampling, no truncation)\n- Preserve question and answer text exactly\n- NEVER add any commentary like \"for brevity\" or \"representative items\"\n- If the CSV is empty, return []",
       "model": "gpt-4.1-mini"
     }
   ],
