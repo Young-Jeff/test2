@@ -4,7 +4,7 @@
       "id": "6573d9ac-75c4-4a5f-a9a2-2703f28402e8",
       "type": "url",
       "name": "Enter your website or content URL",
-      "description": "The URL to generate Q&A content from",
+      "description": "",
       "placeholder": "https://frevana.com/",
       "required": true
     }
@@ -18,57 +18,63 @@
       "nameV2": "Web scraping",
       "type": "fetch_web",
       "outputFormat": "text",
-      "prompt": "@[Question-1 Enter the URL](6573d9ac-75c4-4a5f-a9a2-2703f28402e8)"
+      "prompt": "@[Question-1 Enter the URL](6573d9ac-75c4-4a5f-a9a2-2703f28402e8) "
     },
     {
-      "id": "b7c8d9e0-2f3a-4b5c-a6d7-e8f9a0b1c2d3",
-      "nameV2": "Extract Q&A data",
+      "id": "1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p",
+      "nameV2": "Generate Q&A from Content",
       "type": "ai_prompt",
       "outputFormat": "text",
-      "model": "gpt-5.1",
-      "prompt": "You are an expert content analyzer and Q&A generator. Analyze the provided web content and extract comprehensive Q&A pairs for a FAQ landing page.\n\nWeb Content:\n{{ @[Step-1 Web scraping](0d679e19-c80f-44dd-8aba-7b8eca3e56ff) }}\n\n## CRITICAL DATA PRESERVATION REQUIREMENTS:\n- PRESERVE ALL original content, company information, and specific details from the URL\n- DO NOT remove, modify, or simplify any factual information\n- DO NOT change specific company names, product names, or technical terms\n- MAINTAIN all original URLs, links, and references exactly as provided\n- KEEP all business information, features, and capabilities unchanged\n- PRESERVE all contact information and support details\n\n## EXTRACTION REQUIREMENTS:\nGenerate 15-25 comprehensive Q&A pairs covering:\n1. Company overview and philosophy\n2. Product/service features and benefits\n3. Technical capabilities and specifications\n4. Pricing and business models\n5. Getting started and onboarding\n6. Support and contact information\n7. Security and data protection\n8. Target audience and use cases\n9. Integration and compatibility\n10. Performance and scalability\n\n## OUTPUT FORMAT:\nReturn the data as a CSV with the following structure:\n```csv\nquestion,answer,category,priority\n\"Question text here\",\"Detailed answer here\",\"Category name\",1\n```\n\n### CSV Guidelines:\n- Use proper CSV escaping (quotes around fields containing commas, newlines, or quotes)\n- Each answer should be 100-300 words\n- Category should be one of: General, Features, Integration, Pricing, Support, Security, Technical\n- Priority: 1 (high), 2 (medium), 3 (low)\n- Include header row\n- Escape double quotes by doubling them (\"\" for \")\n\n### Example:\n```csv\nquestion,answer,category,priority\n\"What is ProductName?\",\"ProductName is a comprehensive solution that helps businesses...\",\"General\",1\n\"How does the pricing work?\",\"Our pricing model is designed to be flexible...\",\"Pricing\",2\n```\n\nOutput ONLY the CSV data without any markdown code blocks or additional text."
+      "prompt": "Based on the provided URL content from @[Step-1 Web scraping](0d679e19-c80f-44dd-8aba-7b8eca3e56ff), analyze the content and generate a comprehensive Q&A list.\n\n## YOUR TASK:\n1. ANALYZE the provided URL content thoroughly\n2. EXTRACT key information about the company/product/service\n3. GENERATE comprehensive Q&A pairs covering:\n   - Company overview and philosophy\n   - Product/service features and benefits\n   - Technical capabilities and specifications\n   - Pricing and business models\n   - Getting started and onboarding\n   - Support and contact information\n   - Security and data protection\n   - Target audience and use cases\n   - Integration and compatibility\n   - Performance and scalability\n\n## CRITICAL REQUIREMENTS:\n- Generate 12-25 Q&A pairs minimum\n- Each answer should be detailed and informative (100-300 words)\n- Use ONLY information from the provided URL content\n- Do NOT hallucinate or make up information\n- Preserve company names, product names, and URLs exactly as provided\n\n## OUTPUT FORMAT:\nReturn a JSON array of Q&A pairs:\n[\n  {\"question\": \"What is [Company/Product Name]?\", \"answer\": \"Detailed answer here...\"},\n  {\"question\": \"What are the key features?\", \"answer\": \"Detailed answer here...\"},\n  ...\n]\n\nReturn ONLY the JSON array, no extra text or markdown formatting.",
+      "model": "gpt-4.1"
     },
     {
-      "id": "c9d0e1f2-3a4b-5c6d-a7e8-f9a0b1c2d3e4",
-      "nameV2": "Deduplicate and save to CSV",
-      "type": "python_script",
-      "outputFormat": "csv",
-      "nodeIds": ["0d679e19-c80f-44dd-8aba-7b8eca3e56ff", "b7c8d9e0-2f3a-4b5c-a6d7-e8f9a0b1c2d3"],
-      "script": "# Python script for CSV deduplication and incremental saving\nimport csv\nimport os\nimport hashlib\nfrom io import StringIO\nfrom datetime import datetime\n\ndef normalize_text(text):\n    \"\"\"Normalize text for comparison by removing extra whitespace and lowercasing\"\"\"\n    return ' '.join(text.lower().strip().split())\n\ndef generate_hash(question, answer):\n    \"\"\"Generate a unique hash for a Q&A pair\"\"\"\n    combined = f\"{normalize_text(question)}|{normalize_text(answer)}\"\n    return hashlib.md5(combined.encode('utf-8')).hexdigest()\n\ndef main():\n    # Get the new CSV data from the AI extraction step\n    new_csv_data = data.get('b7c8d9e0-2f3a-4b5c-a6d7-e8f9a0b1c2d3', '').strip()\n    \n    if not new_csv_data:\n        return \"Error: No CSV data generated from extraction step\"\n    \n    # Parse the new CSV data\n    new_rows = []\n    existing_hashes = set()\n    \n    try:\n        csv_reader = csv.DictReader(StringIO(new_csv_data))\n        for row in csv_reader:\n            question = row.get('question', '').strip()\n            answer = row.get('answer', '').strip()\n            category = row.get('category', 'General').strip()\n            priority = row.get('priority', '2').strip()\n            \n            if question and answer:\n                qa_hash = generate_hash(question, answer)\n                \n                if qa_hash not in existing_hashes:\n                    existing_hashes.add(qa_hash)\n                    new_rows.append({\n                        'question': question,\n                        'answer': answer,\n                        'category': category,\n                        'priority': priority,\n                        'hash': qa_hash,\n                        'created_at': datetime.now().isoformat()\n                    })\n    except Exception as e:\n        return f\"Error parsing CSV data: {str(e)}\"\n    \n    # Check if CSV file exists and load existing data\n    csv_file_path = os.path.join(os.getcwd(), 'qa_database.csv')\n    existing_rows = []\n    \n    if os.path.exists(csv_file_path):\n        try:\n            with open(csv_file_path, 'r', encoding='utf-8') as f:\n                reader = csv.DictReader(f)\n                for row in reader:\n                    existing_hash = row.get('hash', '')\n                    if existing_hash:\n                        existing_hashes.add(existing_hash)\n                        existing_rows.append(row)\n        except Exception as e:\n            print(f\"Warning: Error reading existing CSV: {str(e)}\")\n    \n    # Filter out duplicates from new rows\n    unique_new_rows = []\n    duplicate_count = 0\n    \n    for row in new_rows:\n        if row['hash'] not in existing_hashes:\n            unique_new_rows.append(row)\n            existing_hashes.add(row['hash'])\n        else:\n            duplicate_count += 1\n    \n    # Combine existing and new unique rows\n    all_rows = existing_rows + unique_new_rows\n    \n    # Save to CSV file\n    if all_rows:\n        try:\n            with open(csv_file_path, 'w', encoding='utf-8', newline='') as f:\n                fieldnames = ['question', 'answer', 'category', 'priority', 'hash', 'created_at']\n                writer = csv.DictWriter(f, fieldnames=fieldnames)\n                writer.writeheader()\n                writer.writerows(all_rows)\n        except Exception as e:\n            return f\"Error writing CSV file: {str(e)}\"\n    \n    # Generate summary report\n    summary = f\"\"\"CSV Deduplication Summary:\n- Total new Q&A pairs extracted: {len(new_rows)}\n- Unique new Q&A pairs added: {len(unique_new_rows)}\n- Duplicates skipped: {duplicate_count}\n- Total Q&A pairs in database: {len(all_rows)}\n- CSV file saved to: {csv_file_path}\n\"\"\"\n    \n    return summary\n\n# Execute the main function and print the result\nif __name__ == \"__main__\":\n    output = main()\n    print(output)\n"
+      "id": "2b3c4d5e-6f7g-8h9i-0j1k-2l3m4n5o6p7q",
+      "nameV2": "Extract Q&A List",
+      "type": "ai_prompt",
+      "outputFormat": "text",
+      "prompt": "Extract and validate the Q&A pairs from @[Step-2 Generate Q&A from Content](1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p)\n\nIMPORTANT: Preserve the EXACT original wording of each question. Do NOT rephrase, paraphrase, or modify the question text in any way.\n\nOutput format: JSON array with question and answer pairs. Each answer should be concise and factual.\n\nExample output:\n[\n  {\"question\": \"What is the battery life?\", \"answer\": \"The battery lasts up to 10 hours on a single charge.\"},\n  {\"question\": \"Is it compatible with Alexa?\", \"answer\": \"Yes, it works with Alexa, Google Home, and Siri.\"}\n]\n\nReturn ONLY the JSON array, no extra text.",
+      "model": "gpt-4.1-mini"
     },
     {
-      "id": "d0e1f2a3-4b5c-6d7e-a8f9-b0c1d2e3f4a5",
-      "nameV2": "Load CSV data for HTML generation",
+      "id": "3c4d5e6f-7g8h-9i0j-1k2l-3m4n5o6p7q8r",
+      "nameV2": "Export Q&A to CSV",
       "type": "python_script",
       "outputFormat": "text",
-      "nodeIds": ["c9d0e1f2-3a4b-5c6d-a7e8-f9a0b1c2d3e4"],
-      "script": "# Python script to load CSV data and format it for HTML template\nimport csv\nimport os\nimport json\n\ndef main():\n    csv_file_path = os.path.join(os.getcwd(), 'qa_database.csv')\n    \n    if not os.path.exists(csv_file_path):\n        return json.dumps({\n            'error': 'CSV file not found',\n            'qa_pairs': []\n        })\n    \n    qa_pairs = []\n    categories = {}\n    \n    try:\n        with open(csv_file_path, 'r', encoding='utf-8') as f:\n            reader = csv.DictReader(f)\n            for row in reader:\n                question = row.get('question', '').strip()\n                answer = row.get('answer', '').strip()\n                category = row.get('category', 'General').strip()\n                priority = int(row.get('priority', '2'))\n                \n                if question and answer:\n                    qa_pair = {\n                        'question': question,\n                        'answer': answer,\n                        'category': category,\n                        'priority': priority\n                    }\n                    qa_pairs.append(qa_pair)\n                    \n                    # Group by category\n                    if category not in categories:\n                        categories[category] = []\n                    categories[category].append(qa_pair)\n    except Exception as e:\n        return json.dumps({\n            'error': f'Error reading CSV: {str(e)}',\n            'qa_pairs': []\n        })\n    \n    # Sort Q&A pairs by priority (1 = high priority first)\n    qa_pairs.sort(key=lambda x: (x['priority'], x['question']))\n    \n    # Sort categories\n    for category in categories:\n        categories[category].sort(key=lambda x: (x['priority'], x['question']))\n    \n    # Format the output as JSON for easy consumption by HTML template\n    result = {\n        'total_count': len(qa_pairs),\n        'qa_pairs': qa_pairs,\n        'categories': categories,\n        'category_list': list(categories.keys())\n    }\n    \n    return json.dumps(result, ensure_ascii=False, indent=2)\n\n# Execute the main function and print the result\nif __name__ == \"__main__\":\n    output = main()\n    print(output)\n"
+      "script": "# Python script for workflow task - Export Q&A to CSV\n# Available global variables:\n# - data: dict containing results from previous nodes\n\nimport json\nimport csv\nimport os\nfrom datetime import datetime\n\ndef parse_qa_pairs(qa_json_str, current_time):\n    \"\"\"\n    Parse Q&A pairs from JSON string.\n    \n    Args:\n        qa_json_str: JSON string containing Q&A pairs\n        current_time: Current datetime string to assign to new records\n        \n    Returns:\n        List of tuples (Time, Question, Answer)\n    \"\"\"\n    if not qa_json_str:\n        return []\n    \n    try:\n        # Try to parse as JSON array\n        qa_pairs = json.loads(qa_json_str)\n        if not isinstance(qa_pairs, list):\n            return []\n        \n        result = []\n        for item in qa_pairs:\n            if isinstance(item, dict) and 'question' in item and 'answer' in item:\n                question = item['question'].strip()\n                answer = item['answer'].strip()\n                if question and answer:\n                    result.append((current_time, question, answer))\n        \n        return result\n    except json.JSONDecodeError:\n        # If JSON parsing fails, return empty list\n        return []\n    except Exception as e:\n        return []\n\ndef read_existing_csv(csv_path):\n    \"\"\"\n    Read existing CSV file and return list of (Time, Question, Answer) tuples.\n    \n    Args:\n        csv_path: Path to CSV file\n        \n    Returns:\n        List of (Time, Question, Answer) tuples\n    \"\"\"\n    existing_records = []\n    \n    if os.path.exists(csv_path):\n        try:\n            with open(csv_path, 'r', encoding='utf-8', newline='') as f:\n                reader = csv.DictReader(f)\n                for row in reader:\n                    if 'Question' in row and row['Question']:\n                        dt = row.get('Time', '').strip()\n                        question = row['Question'].strip()\n                        answer = row.get('Answer', '').strip()\n                        existing_records.append((dt, question, answer))\n        except Exception as e:\n            # If there's an error reading the file, just return empty list\n            pass\n    \n    return existing_records\n\ndef export_to_csv(qa_data, csv_path):\n    \"\"\"\n    Export Q&A to CSV file with deduplication.\n    Rewrites the entire file with existing + new records.\n    \n    Args:\n        qa_data: List of tuples (Time, Question, Answer)\n        csv_path: Path to CSV file\n        \n    Returns:\n        dict with export statistics\n    \"\"\"\n    # Read existing records\n    existing_records = read_existing_csv(csv_path)\n    \n    # Create a set of questions for quick duplicate checking\n    existing_questions = {question for dt, question, answer in existing_records}\n    \n    # Merge existing and new records, filtering duplicates\n    all_records = list(existing_records)\n    new_count = 0\n    duplicate_count = 0\n    \n    for dt, question, answer in qa_data:\n        if question not in existing_questions:\n            # New record, add it\n            all_records.append((dt, question, answer))\n            existing_questions.add(question)\n            new_count += 1\n        else:\n            # Duplicate, skip it\n            duplicate_count += 1\n    \n    # Sort records by time, then by question\n    sorted_records = sorted(all_records, key=lambda x: (x[0], x[1]))\n    \n    # Rewrite entire CSV file\n    try:\n        # Ensure directory exists\n        os.makedirs(os.path.dirname(csv_path), exist_ok=True)\n        \n        with open(csv_path, 'w', encoding='utf-8', newline='') as f:\n            writer = csv.writer(f)\n            \n            # Write header with Answer column\n            writer.writerow(['Time', 'Question', 'Answer'])\n            \n            # Write all records\n            for dt, question, answer in sorted_records:\n                writer.writerow([dt, question, answer])\n        \n        return {\n            'success': True,\n            'message': f'Successfully exported {new_count} new Q&A ({duplicate_count} duplicates skipped). Total records: {len(sorted_records)}',\n            'data': csv_path\n        }\n        \n    except Exception as e:\n        return {\n            'success': False,\n            'message': f'Failed to export Q&A: {str(e)}',\n            'data': None\n        }\n\ndef main():\n    \"\"\"\n    Main function to process Q&A and export to CSV.\n    \"\"\"\n    try:\n        # Check data exists\n        if 'data' not in globals() or not isinstance(data, dict):\n            return json.dumps({\n                \"success\": False,\n                \"message\": \"Data not found\",\n                \"data\": None\n            }, indent=2)\n        \n        # Get CSV directory and filename from data\n        csv_directory = get_agent_dir()\n            \n        # Construct CSV path\n        csv_filename = 'Website Q&A Research.csv'\n        csv_path = os.path.join(csv_directory, csv_filename)\n        \n        # Get current time with minute precision\n        current_time = datetime.now().strftime('%Y-%m-%d %H:%M')\n        \n        # Get input data - Q&A JSON from Step 3\n        qa_json_str = data.get('2b3c4d5e-6f7g-8h9i-0j1k-2l3m4n5o6p7q', '').strip()\n        \n        # Parse Q&A pairs\n        all_qa = parse_qa_pairs(qa_json_str, current_time)\n        \n        # Export to CSV\n        if all_qa:\n            result = export_to_csv(all_qa, csv_path)\n            return json.dumps({\n                \"success\": result['success'],\n                \"message\": result['message'],\n                \"data\": result['data']\n            }, indent=2)\n        else:\n            return json.dumps({\n                \"success\": False,\n                \"message\": \"No Q&A found in input data\",\n                \"data\": csv_path\n            }, indent=2)\n        \n    except Exception as e:\n        return json.dumps({\n            \"success\": False,\n            \"message\": f\"Error: {str(e)}\",\n            \"data\": None\n        }, indent=2)\n\nif __name__ == \"__main__\":\n    output = main()\n    print(output)\n",
+      "nodeIds": ["2b3c4d5e-6f7g-8h9i-0j1k-2l3m4n5o6p7q"]
+    },
+    {
+      "id": "4d5e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s",
+      "nameV2": "Get CSV file path",
+      "type": "script",
+      "outputFormat": "text",
+      "script": "\nmodule.exports = async function() {\n  \n  let result = JSON.parse(data[\"3c4d5e6f-7g8h-9i0j-1k2l-3m4n5o6p7q8r\"]);\n  if(result.success && !!result.data){\n    return result.data;\n  }\n  throw Error(result?.message || \"Export Q&A error\");\n  \n}\n",
+      "nodeIds": ["3c4d5e6f-7g8h-9i0j-1k2l-3m4n5o6p7q8r"]
     }
   ],
   "results": [
     {
-      "type": "csv",
+      "type": "plain_text",
       "fields": [],
-      "items": {
-        "content": "c9d0e1f2-3a4b-5c6d-a7e8-f9a0b1c2d3e4"
-      }
+      "items": { "content": "1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p" }
+    },
+    {
+      "type": "local_file",
+      "fields": [],
+      "items": { "content": "4d5e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s" }
     },
     {
       "type": "html",
       "fields": ["content"],
-      "items": {
-        "content": "d0e1f2a3-4b5c-6d7e-a8f9-b0c1d2e3f4a5"
-      },
-      "metadata": {
-        "templateId": "qa-page-style-1"
-      }
+      "items": { "content": "4d5e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s" },
+      "metadata": { "templateId": "qa-page-style-4" }
     }
   ],
   "version": "1.0",
   "metadata": {
-    "author": "System",
-    "createdAt": "2026-01-30T08:00:00.000Z",
-    "description": "Enhanced Q&A page generator with CSV storage and incremental deduplication"
+    "author": "Updated with CSV export",
+    "createdAt": "2026-01-30T07:41:49.140Z"
   },
   "frequency": "-1",
   "workflowConnects": []
