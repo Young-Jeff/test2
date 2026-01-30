@@ -59,13 +59,21 @@
       "outputFormat": "text",
       "script": "\nconst fs = require('fs');\n\nmodule.exports = async function() {\n  try {\n    // Get CSV file path from previous step\n    const csvPath = data[\"4d5e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s\"];\n    \n    if (!csvPath) {\n      throw new Error(\"CSV file path not found\");\n    }\n    \n    // Read CSV file content\n    const csvContent = fs.readFileSync(csvPath, 'utf-8');\n    \n    if (!csvContent) {\n      throw new Error(\"CSV file is empty\");\n    }\n    \n    return csvContent;\n    \n  } catch (error) {\n    throw new Error(`Failed to read CSV: ${error.message}`);\n  }\n}\n",
       "nodeIds": ["4d5e6f7g-8h9i-0j1k-2l3m-4n5o6p7q8r9s"]
+    },
+    {
+      "id": "6f7g8h9i-0j1k-2l3m-4n5o-6p7q8r9s0t1u",
+      "nameV2": "Generate HTML Report from CSV",
+      "type": "ai_prompt",
+      "outputFormat": "text",
+      "prompt": "Read the CSV data from @[Step-6 Read CSV Content](5e6f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t) and prepare it for HTML rendering.\n\nThe CSV contains all Q&A pairs (including historical data) in the format:\nTime,Question,Answer\n2026-01-30 15:51,Question text,Answer text\n...\n\n## YOUR TASK:\n1. Parse the CSV data (skip the header row)\n2. Extract ALL Question and Answer pairs\n3. Return a formatted summary that includes:\n   - Total number of Q&A pairs\n   - All questions and answers in a clear format\n\n## OUTPUT FORMAT:\nReturn the data in this format:\n\n---\nTotal Q&A Pairs: [NUMBER]\n\nQ&A List:\n\n1. Q: [Question 1]\n   A: [Answer 1]\n\n2. Q: [Question 2]\n   A: [Answer 2]\n\n...\n---\n\nIMPORTANT:\n- Include ALL Q&A pairs from the CSV (not just recent ones)\n- Preserve the exact question and answer text\n- Number each Q&A pair sequentially\n- This data will be used for HTML generation",
+      "model": "gpt-4.1-mini"
     }
   ],
   "results": [
     {
       "type": "plain_text",
       "fields": [],
-      "items": { "content": "1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p" }
+      "items": { "content": "6f7g8h9i-0j1k-2l3m-4n5o-6p7q8r9s0t1u" }
     },
     {
       "type": "local_file",
@@ -75,13 +83,13 @@
     {
       "type": "html",
       "fields": ["content"],
-      "items": { "content": "5e6f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t" },
+      "items": { "content": "6f7g8h9i-0j1k-2l3m-4n5o-6p7q8r9s0t1u" },
       "metadata": { "templateId": "qa-page-style-4" }
     }
   ],
   "version": "1.0",
   "metadata": {
-    "author": "Updated with CSV export",
+    "author": "Updated with CSV export and AI-based HTML generation",
     "createdAt": "2026-01-30T07:41:49.140Z"
   },
   "frequency": "-1",
