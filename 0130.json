@@ -63,10 +63,10 @@
     {
       "id": "6f7g8h9i-0j1k-2l3m-4n5o-6p7q8r9s0t1u",
       "nameV2": "Parse CSV to JSON",
-      "type": "ai_prompt",
+      "type": "python_script",
       "outputFormat": "text",
-      "prompt": "Read the CSV data from @[Step-6 Read CSV Content](5e6f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t) and convert it into a strict JSON array for HTML rendering.\n\nThe CSV format is:\nTime,Question,Answer\n2026-01-30 15:51,Question text,Answer text\n...\n\n## YOUR TASK:\n1. Parse the CSV data and skip the header row\n2. Extract ALL Question and Answer pairs (including historical data)\n3. Return ONLY a JSON array of objects with \"question\" and \"answer\"\n\n## OUTPUT FORMAT (STRICT):\n[\n  {\"question\": \"Question 1\", \"answer\": \"Answer 1\"},\n  {\"question\": \"Question 2\", \"answer\": \"Answer 2\"}\n]\n\n## CRITICAL RULES:\n- Return ONLY valid JSON (no markdown, no notes, no extra text)\n- Include EVERY row from the CSV (no sampling, no truncation)\n- Preserve question and answer text exactly\n- NEVER add any commentary like \"for brevity\" or \"representative items\"\n- If the CSV is empty, return []",
-      "model": "gpt-4.1-mini"
+      "script": "# Parse CSV content into JSON array\n# Available global variables:\n# - data: dict containing results from previous nodes\n\nimport csv\nimport json\nimport io\n\n\ndef main():\n    if 'data' not in globals() or not isinstance(data, dict):\n        return json.dumps([])\n\n    csv_text = data.get('5e6f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t', '')\n    if not csv_text:\n        return json.dumps([])\n\n    try:\n        reader = csv.DictReader(io.StringIO(csv_text))\n        qa_pairs = []\n        for row in reader:\n            question = (row.get('Question') or '').strip()\n            answer = (row.get('Answer') or '').strip()\n            if question and answer:\n                qa_pairs.append({\n                    'question': question,\n                    'answer': answer,\n                })\n        return json.dumps(qa_pairs, ensure_ascii=False)\n    except Exception:\n        return json.dumps([])\n\n\nif __name__ == '__main__':\n    output = main()\n    print(output)\n",
+      "nodeIds": ["5e6f7g8h-9i0j-1k2l-3m4n-5o6p7q8r9s0t"]
     }
   ],
   "results": [
