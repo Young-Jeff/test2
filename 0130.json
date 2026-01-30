@@ -7,24 +7,10 @@
       "description": "The URL to generate Q&A content from",
       "placeholder": "https://frevana.com/",
       "required": true
-    },
-    {
-      "id": "a8f3e4b2-1d5c-4e9a-b3f2-8c9d7e6f5a4b",
-      "type": "select",
-      "name": "Select Q&A page style",
-      "description": "Choose the design style for your Q&A page",
-      "options": [
-        { "value": "qa-page-style-1", "label": "Style 1 - Empathy Design (Clean & Professional)" },
-        { "value": "qa-page-style-2", "label": "Style 2 - Medical Style (Green Theme)" },
-        { "value": "qa-page-style-3", "label": "Style 3 - Modern Blue (Animated)" },
-        { "value": "qa-page-style-4", "label": "Style 4 - Pipe Design (Enterprise)" }
-      ],
-      "required": true
     }
   ],
   "inputValues": {
-    "6573d9ac-75c4-4a5f-a9a2-2703f28402e8": ["https://www.frevana.com"],
-    "a8f3e4b2-1d5c-4e9a-b3f2-8c9d7e6f5a4b": ["qa-page-style-1"]
+    "6573d9ac-75c4-4a5f-a9a2-2703f28402e8": ["https://www.frevana.com"]
   },
   "workflows": [
     {
